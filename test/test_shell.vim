@@ -215,14 +215,20 @@ function! Test_state_zsh() abort
 endfunction
 
 " Values with bytes that typeset/declare -p mangle (\034, \001) survive.
+" Before a quote zsh's \034, \234, \247 and \334 broke the whole dump, losing
+" every variable, or ran the rest of the value as code.
 function! s:check_binary_state(shell) abort
   call s:reset()
   call s:buf('binary.' . a:shell, ['#!/bin/' . a:shell,
         \ 'k=$(printf ''a\034P\001b''); a=("$k" x)',
-        \ 'printf %s "$k" "${a[@]}" | od -An -v -tx1 | tr -d '' \n'''])
+        \ 'printf %s "$k" "${a[@]}" | od -An -v -tx1 | tr -d '' \n''',
+        \ 'for b in 034 234 247 334; do eval "v$b=\$(printf ''a\\$b'')"; done; c=$(printf ''\247$(echo run)''); q=("$v247" "$v034"); after=ok',
+        \ 'printf %s "$v034" "$v234" "$v247" "$v334" "$c" "${q[@]}" | od -An -v -tx1 | tr -d '' \n''; echo " $after"'])
   call s:run(2)
   call assert_equal(['611c500162611c50016278'], s:run_out(3))
   call assert_equal(['611c500162611c50016278'], s:run_out(3))
+  call s:run(4)
+  call assert_equal(['611c619c61a761dca724286563686f2072756e2961a7611c ok'], s:run_out(5))
 endfunction
 
 function! Test_binary_state_bash() abort
