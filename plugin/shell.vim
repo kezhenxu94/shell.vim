@@ -9,6 +9,7 @@ nnoremap <silent> <Plug>(shell-run) :<C-u>Sh run<CR>
 xnoremap <silent> <Plug>(shell-run-selection) :Sh run<CR>
 nnoremap <silent> <Plug>(shell-run-tocursor) :<C-u>Sh tocursor<CR>
 nnoremap <silent> <Plug>(shell-run-file) :<C-u>Sh file<CR>
+nnoremap <silent> <Plug>(shell-run-all) :<C-u>%Sh run<CR>
 nnoremap <silent> <Plug>(shell-actions) :<C-u>Sh actions<CR>
 nnoremap <silent> <Plug>(shell-history) :<C-u>Sh history<CR>
 
@@ -38,7 +39,8 @@ function! s:mappings() abort
   xmap <buffer> <LocalLeader>r <Plug>(shell-run-selection)
   nmap <buffer> <LocalLeader>rtc <Plug>(shell-run-tocursor)
   nmap <buffer> <LocalLeader>rf <Plug>(shell-run-file)
-  nmap <buffer> <LocalLeader>ra <Plug>(shell-actions)
+  nmap <buffer> <LocalLeader>ral <Plug>(shell-run-all)
+  nmap <buffer> <LocalLeader>rc <Plug>(shell-actions)
   nmap <buffer> <LocalLeader>rh <Plug>(shell-history)
 endfunction
 

@@ -117,7 +117,7 @@ function! shell#restart() abort
 endfunction
 
 function! shell#interrupt() abort
-  let sess = bufnr('%') == shell#preview#bufnr() ? get(s:, 'last', {}) : get(s:sessions, s:key(bufnr('%')), {})
+  let sess = get(b:, 'shell_preview', 0) ? get(s:, 'last', {}) : get(s:sessions, s:key(bufnr('%')), {})
   if empty(sess) || empty(sess.cur)
     return s:error('nothing is running')
   endif
@@ -149,7 +149,8 @@ endfunction
 " Absolute path of buf's script, or '' if it has no name.
 function! shell#script(buf) abort
   let src = s:source(a:buf)
-  return bufname(src) ==# '' ? '' : fnamemodify(bufname(src), ':p')
+  " Resolved: Neovim may switch a name between a symlink and its target.
+  return bufname(src) ==# '' ? '' : resolve(fnamemodify(bufname(src), ':p'))
 endfunction
 
 " The session of buf (default: current buffer), or {} if none is running.
@@ -261,8 +262,12 @@ function! s:enqueue(sess, items) abort
     let item.batch = s:batch
   endfor
   let a:items[0].first = 1
+  let preview = shell#preview#buffer(shell#script(get(a:items[-1], 'buf', a:sess.src)))
+  for item in a:items
+    let item.preview = preview
+  endfor
   call extend(a:sess.queue, a:items)
-  call shell#preview#open()
+  call shell#preview#open(preview)
   call s:next(a:sess)
 endfunction
 
@@ -281,13 +286,13 @@ function! s:next(sess) abort
   call writefile(split(item.code, "\n", 1), a:sess.dir . '/' . item.id)
   if item.kind !=# 'init'
     if get(item, 'first', 0)
-      call shell#preview#clear()
+      call shell#preview#clear(item.preview)
     endif
-    let item.header = shell#preview#add('')
+    let item.header = shell#preview#add(item.preview, '')
     call s:header(item, [['running', 'ShellRunning'], [fnamemodify(a:sess.cwd, ':~'), 'ShellMuted']])
-    call shell#preview#code(split(item.code, "\n", 1))
+    call shell#preview#code(item.preview, split(item.code, "\n", 1))
     if has_key(item, 'mark')
-      call shell#preview#link(item.header, item.buf, item.mark)
+      call shell#preview#link(item.preview, item.header, item.buf, item.mark)
       if !has_key(item, 'setup')
         call shell#mark#show(item.buf, item.mark, {'status': [['⟳ running', 'ShellRunning']]})
       endif
@@ -305,7 +310,7 @@ function! s:header(item, chunks) abort
   for chunk in a:chunks
     call extend(chunks, [[' · ', 'ShellMuted'], chunk])
   endfor
-  call shell#preview#set(a:item.header, chunks)
+  call shell#preview#set(a:item.preview, a:item.header, chunks)
 endfunction
 
 function! s:on_line(sess, line) abort
@@ -316,7 +321,7 @@ function! s:on_line(sess, line) abort
   let i = stridx(a:line, "\x1eSHDONE ")
   let out = i < 0 ? a:line : strpart(a:line, 0, i)
   if i != 0 && item.kind !=# 'init'
-    let [text, spans] = shell#preview#output(out, item.ansi)
+    let [text, spans] = shell#preview#output(item.preview, out, item.ansi)
     if trim(text) !=# ''
       let item.last = trim(text)
     endif
@@ -519,7 +524,7 @@ function! s:on_exit(sess, code) abort
     return
   endif
   if !empty(a:sess.cur) && has_key(a:sess.cur, 'header')
-    call shell#preview#set(a:sess.cur.header, '── ' . a:sess.cur.label . ' · session exited ' . a:code)
+    call s:header(a:sess.cur, [['session exited ' . a:code, 'ShellFail']])
   endif
   call s:stop(a:sess)
 endfunction

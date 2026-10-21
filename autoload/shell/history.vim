@@ -52,6 +52,9 @@ function! shell#history#list(script) abort
       catch
       endtry
     endfor
+    for e in entries
+      let e.script = a:script
+    endfor
     let s:cache[file] = {'mtime': mtime, 'entries': entries}
   endif
   return s:cache[file].entries
@@ -87,19 +90,20 @@ endfunction
 " Show an entry in the [Shell] window: header, the code, then its output.
 function! shell#history#show(entry) abort
   let e = a:entry
-  call shell#preview#open()
-  call shell#preview#clear()
-  let header = shell#preview#add('')
-  call shell#preview#set(header, [['── history ' . e.label, 'ShellHeader'],
+  let buf = shell#preview#buffer(get(e, 'script', ''))
+  call shell#preview#open(buf)
+  call shell#preview#clear(buf)
+  let header = shell#preview#add(buf, '')
+  call shell#preview#set(buf, header, [['── history ' . e.label, 'ShellHeader'],
         \ [' · ', 'ShellMuted'], [e.status ? 'exit ' . e.status : 'exit 0', e.status ? 'ShellFail' : 'ShellOk'],
         \ [' · ' . shell#history#duration(e.ms) . ' · ' . strftime('%Y-%m-%d %H:%M:%S', e.time)
         \ . ' · ' . fnamemodify(e.cwd, ':~'), 'ShellMuted']])
-  call shell#preview#code(split(e.code, "\n", 1))
+  call shell#preview#code(buf, split(e.code, "\n", 1))
   let state = {}
   for line in e.output
-    call shell#preview#output(line, state)
+    call shell#preview#output(buf, line, state)
   endfor
   if get(e, 'truncated', 0)
-    call shell#preview#set(shell#preview#add(''), [['… ' . e.truncated . ' more lines not kept', 'ShellMuted']])
+    call shell#preview#set(buf, shell#preview#add(buf, ''), [['… ' . e.truncated . ' more lines not kept', 'ShellMuted']])
   endif
 endfunction

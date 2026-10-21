@@ -392,6 +392,10 @@ function! Test_keys() abort
   execute "normal 1GVj\\r"
   call s:wait()
   call assert_equal(['one', 'two'], s:out())
+  execute "normal \\ral"
+  call s:wait()
+  call assert_match('^── L1-3 ', s:preview()[0])
+  call assert_equal(['one', 'two', 'three'], s:out())
   call cursor(3, 1)
   execute "normal \\rtc"
   call s:wait()
@@ -414,7 +418,9 @@ function! Test_mappings() abort
   call assert_match('shell-run-selection', maparg('<LocalLeader>r', 'x'))
   call assert_match('shell-run-tocursor', maparg('<LocalLeader>rtc', 'n'))
   call assert_match('shell-run-file', maparg('<LocalLeader>rf', 'n'))
-  call assert_match('shell-actions', maparg('<LocalLeader>ra', 'n'))
+  call assert_match('shell-actions', maparg('<LocalLeader>rc', 'n'))
+  call assert_match('shell-run-all', maparg('<LocalLeader>ral', 'n'))
+  call assert_equal('', maparg('<LocalLeader>ra', 'n'))
   call assert_match('shell-history', maparg('<LocalLeader>rh', 'n'))
   let g:shell_no_mappings = 1
   call s:buf('nomap.sh', ['echo x'], 'sh')
@@ -511,6 +517,38 @@ function! Test_region_status() abort
   call assert_equal('', shell#mark#region_status(buf, 2))
 endfunction
 
+function! Test_preview_named_after_file() abort
+  call s:reset()
+  call s:buf('a.sh', ['echo from a'], 'sh')
+  let a = shell#script(bufnr('%'))
+  call s:run(1)
+  let pa = shell#preview#bufnr()
+  call assert_equal('[Shell] ' . fnamemodify(a, ':~:.'), bufname(pa))
+  call s:buf('b.sh', ['echo from b'], 'sh')
+  call s:run(1)
+  let pb = shell#preview#bufnr()
+  call assert_notequal(pa, pb)
+  call assert_match('b\.sh$', bufname(pb))
+  " One preview window, now showing b; a keeps its output.
+  call assert_equal(1, len(filter(range(1, winnr('$')), 'getbufvar(winbufnr(v:val), "shell_preview", 0)')))
+  call assert_notequal(-1, bufwinid(pb))
+  call assert_equal(['$ echo from a', 'from a'], getbufline(pa, 2, '$'))
+  " A scratch buffer uses its script's preview; history too.
+  Sh scratch
+  call setline(1, 'echo scratch')
+  call s:run(1)
+  call assert_equal(pb, shell#preview#bufnr())
+  call shell#history#show(shell#history#list(a)[-1])
+  call assert_equal(pa, shell#preview#bufnr())
+  call assert_notequal(-1, bufwinid(pa))
+  " A buffer without a name uses plain [Shell].
+  enew
+  setfiletype sh
+  call setline(1, 'echo')
+  call s:run(1)
+  call assert_equal('[Shell]', bufname(shell#preview#bufnr()))
+endfunction
+
 function! Test_preview_header_and_jump() abort
   call s:reset()
   call s:buf('jump.sh', ['echo one', 'echo two', 'false'], 'sh')
@@ -537,7 +575,7 @@ endfunction
 " ------------------------------------------------------------------ history
 
 function! s:script() abort
-  return fnamemodify(bufname('%'), ':p')
+  return shell#script(bufnr('%'))
 endfunction
 
 function! Test_history_recorded() abort
@@ -586,7 +624,7 @@ function! Test_history_show() abort
   call s:buf('show.sh', ['echo one', 'echo two; exit 2'], 'sh')
   call s:run(1, 2)
   let e = shell#history#list(s:script())[-1]
-  call shell#preview#clear()
+  call shell#preview#clear(shell#preview#bufnr())
   call shell#history#show(e)
   let out = s:preview()
   call assert_match('^── history L1-2 · exit 2 · \d\+ms · \d\{4}-\d\d-\d\d \d\d:\d\d:\d\d · ', out[0])
@@ -690,7 +728,7 @@ function! Test_history_menu() abort
   call s:run(1)
   call cursor(1, 1)
   " Newest first: the second run of line 1 (n=1).
-  call shell#preview#clear()
+  call shell#preview#clear(shell#preview#bufnr())
   call s:pick(1)
   Sh history
   call s:picked(1)
@@ -718,7 +756,7 @@ function! Test_popup_menu() abort
   call assert_match('Run command (L1)', menu)
   call assert_match('History', menu)
   call assert_match('✓ \d\+ms · L1 · echo from popup', menu)
-  call shell#preview#clear()
+  call shell#preview#clear(shell#preview#bufnr())
   execute 'emenu PopUp.Shell.Run\ command\ (L1)'
   call s:wait()
   call assert_equal(['from popup'], s:out())

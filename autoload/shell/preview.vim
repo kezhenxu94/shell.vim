@@ -1,92 +1,115 @@
-" The [Shell] preview window: run headers, streamed output, ANSI colors.
+" The preview window: one "[Shell] <file>" buffer per script, with run
+" headers, the code that ran, streamed output and ANSI colors.
 
 let s:buf = -1
-let s:empty = 1
+let s:bufs = {}
 let s:palette = ['#000000', '#cd0000', '#00cd00', '#cdcd00', '#0000ee', '#cd00cd', '#00cdcd', '#e5e5e5',
       \ '#7f7f7f', '#ff0000', '#00ff00', '#ffff00', '#5c5cff', '#ff00ff', '#00ffff', '#ffffff']
 let s:defined = {}
-let s:links = {}
 
 augroup shell_preview
   autocmd!
   autocmd ColorScheme * let s:defined = {}
 augroup END
 
+" The preview buffer shown last.
 function! shell#preview#bufnr() abort
   return s:buf
 endfunction
 
-" Show the preview window (without focusing it), creating the buffer.
-function! shell#preview#open() abort
-  if !bufexists(s:buf)
-    let s:buf = bufadd('[Shell]')
-    call bufload(s:buf)
-    call setbufvar(s:buf, '&buftype', 'nofile')
-    call setbufvar(s:buf, '&bufhidden', 'hide')
-    call setbufvar(s:buf, '&swapfile', 0)
-    call setbufvar(s:buf, '&buflisted', 0)
-    call setbufvar(s:buf, '&modifiable', 0)
-    let s:empty = 1
+" The preview buffer of script (an absolute path, or '' for none).
+function! shell#preview#buffer(script) abort
+  let name = a:script ==# '' ? '[Shell]' : '[Shell] ' . fnamemodify(a:script, ':~:.')
+  let buf = get(s:bufs, name, -1)
+  if bufexists(buf)
+    return buf
   endif
-  if bufwinid(s:buf) != -1
-    return
-  endif
-  let cur = win_getid()
-  execute 'botright vertical ' . get(g:, 'shell_preview_width', 80) . 'split'
-  execute 'buffer ' . s:buf
-  setlocal winfixwidth nonumber norelativenumber signcolumn=no nolist nowrap
-  nnoremap <buffer> <silent> q :close<CR>
-  nnoremap <buffer> <silent> <CR> :call shell#preview#jump()<CR>
-  nnoremap <buffer> <silent> <C-c> :Sh interrupt<CR>
-  call win_gotoid(cur)
+  let buf = bufadd(name)
+  call bufload(buf)
+  for [opt, val] in [['&buftype', 'nofile'], ['&bufhidden', 'hide'], ['&swapfile', 0], ['&buflisted', 0], ['&modifiable', 0]]
+    call setbufvar(buf, opt, val)
+  endfor
+  call setbufvar(buf, 'shell_preview', 1)
+  call setbufvar(buf, 'shell_empty', 1)
+  call setbufvar(buf, 'shell_links', {})
+  let s:bufs[name] = buf
+  return buf
 endfunction
 
-function! shell#preview#clear() abort
-  if !bufexists(s:buf)
+" Show buf in the preview window (without focusing it): reuse the window
+" of another preview buffer, else open a split.
+function! shell#preview#open(buf) abort
+  let s:buf = a:buf
+  if bufwinid(a:buf) != -1
     return
   endif
-  call s:modify('silent call deletebufline(s:buf, 1, "$")')
-  call shell#compat#clear(s:buf)
-  let s:empty = 1
-  let s:links = {}
-endfunction
-
-" Append a line of text; returns its line number.
-function! shell#preview#add(text) abort
-  if s:empty
-    call s:modify('call setbufline(s:buf, 1, a:1)', a:text)
-    let s:empty = 0
+  let winid = get(filter(map(range(1, winnr('$')), 'win_getid(v:val)'), 'getbufvar(winbufnr(v:val), "shell_preview", 0)'), 0, 0)
+  if winid
+    call win_execute(winid, 'buffer ' . a:buf)
   else
-    call s:modify('call appendbufline(s:buf, "$", a:1)', a:text)
+    let cur = win_getid()
+    execute 'botright vertical ' . get(g:, 'shell_preview_width', 80) . 'split'
+    execute 'buffer ' . a:buf
+    setlocal winfixwidth nonumber norelativenumber signcolumn=no nolist nowrap
+    let winid = win_getid()
+    call win_gotoid(cur)
   endif
-  let lnum = getbufinfo(s:buf)[0].linecount
-  call s:follow()
+  if !getbufvar(a:buf, 'shell_mapped', 0)
+    call win_execute(winid, 'nnoremap <buffer> <silent> q :close<CR>')
+    call win_execute(winid, 'nnoremap <buffer> <silent> <CR> :call shell#preview#jump()<CR>')
+    call win_execute(winid, 'nnoremap <buffer> <silent> <C-c> :Sh interrupt<CR>')
+    call setbufvar(a:buf, 'shell_mapped', 1)
+  endif
+endfunction
+
+function! shell#preview#clear(buf) abort
+  if !bufexists(a:buf)
+    return
+  endif
+  call s:modify(a:buf, 'silent call deletebufline(a:1, 1, "$")', a:buf)
+  call shell#compat#clear(a:buf)
+  call setbufvar(a:buf, 'shell_empty', 1)
+  call setbufvar(a:buf, 'shell_links', {})
+endfunction
+
+" Append a line of text to buf; returns its line number.
+function! shell#preview#add(buf, text) abort
+  if getbufvar(a:buf, 'shell_empty')
+    call s:modify(a:buf, 'call setbufline(a:1, 1, a:2)', a:buf, a:text)
+    call setbufvar(a:buf, 'shell_empty', 0)
+  else
+    call s:modify(a:buf, 'call appendbufline(a:1, "$", a:2)', a:buf, a:text)
+  endif
+  let lnum = getbufinfo(a:buf)[0].linecount
+  call s:follow(a:buf)
   return lnum
 endfunction
 
-" Replace line lnum with chunks [[text, group], ...].
-function! shell#preview#set(lnum, chunks) abort
-  call s:modify('call setbufline(s:buf, a:1, a:2)', a:lnum, join(map(copy(a:chunks), 'v:val[0]'), ''))
-  call shell#compat#clear(s:buf, a:lnum)
+" Replace line lnum of buf with chunks [[text, group], ...].
+function! shell#preview#set(buf, lnum, chunks) abort
+  call s:modify(a:buf, 'call setbufline(a:1, a:2, a:3)', a:buf, a:lnum, join(map(copy(a:chunks), 'v:val[0]'), ''))
+  call shell#compat#clear(a:buf, a:lnum)
   let col = 0
   for [text, group] in a:chunks
-    call shell#compat#highlight(s:buf, a:lnum, col, strlen(text), group)
+    call shell#compat#highlight(a:buf, a:lnum, col, strlen(text), group)
     let col += strlen(text)
   endfor
 endfunction
 
-" Make <CR> on the section starting at header lnum jump to mark id in buf.
-function! shell#preview#link(lnum, buf, id) abort
-  let s:links[a:lnum] = [a:buf, a:id]
+" Make <CR> on the section of buf starting at header lnum jump to mark id
+" in src.
+function! shell#preview#link(buf, lnum, src, id) abort
+  call extend(getbufvar(a:buf, 'shell_links'), {a:lnum: [a:src, a:id]})
 endfunction
 
 " Go to the source lines of the section under the cursor.
 function! shell#preview#jump() abort
-  let heads = filter(map(keys(s:links), 'str2nr(v:val)'), 'v:val <= line(".")')
+  let links = get(b:, 'shell_links', {})
+  let heads = filter(map(keys(links), 'str2nr(v:val)'), 'v:val <= line(".")')
   if empty(heads)
     return
   endif
-  let [buf, id] = s:links[max(heads)]
+  let [buf, id] = links[max(heads)]
   let r = shell#mark#range(buf, id)
   if empty(r)
     echohl WarningMsg | echo 'shell: those lines are gone' | echohl None
@@ -103,34 +126,34 @@ function! shell#preview#jump() abort
 endfunction
 
 " Echo the executed code: "$ " before the first line, "> " before the rest.
-function! shell#preview#code(lines) abort
+function! shell#preview#code(buf, lines) abort
   let prefix = '$ '
   for line in a:lines
-    call shell#preview#set(shell#preview#add(''), [[prefix, 'ShellMuted'], [line, 'ShellCode']])
+    call shell#preview#set(a:buf, shell#preview#add(a:buf, ''), [[prefix, 'ShellMuted'], [line, 'ShellCode']])
     let prefix = '> '
   endfor
 endfunction
 
-" Append a line of program output, rendering ANSI SGR codes with state
-" (a dict carried across the run's lines). Returns [text, spans].
-function! shell#preview#output(line, state) abort
+" Append a line of program output to buf, rendering ANSI SGR codes with
+" state (a dict carried across the run's lines). Returns [text, spans].
+function! shell#preview#output(buf, line, state) abort
   let [text, spans] = shell#preview#ansi(a:line, a:state)
-  let lnum = shell#preview#add(text)
+  let lnum = shell#preview#add(a:buf, text)
   for [col, len, group] in spans
-    call shell#compat#highlight(s:buf, lnum, col, len, group)
+    call shell#compat#highlight(a:buf, lnum, col, len, group)
   endfor
   return [text, spans]
 endfunction
 
-function! s:modify(cmd, ...) abort
-  call setbufvar(s:buf, '&modifiable', 1)
+function! s:modify(buf, cmd, ...) abort
+  call setbufvar(a:buf, '&modifiable', 1)
   execute a:cmd
-  call setbufvar(s:buf, '&modifiable', 0)
+  call setbufvar(a:buf, '&modifiable', 0)
 endfunction
 
 " Keep windows showing the end of the output, unless the user is in one.
-function! s:follow() abort
-  for winid in win_findbuf(s:buf)
+function! s:follow(buf) abort
+  for winid in win_findbuf(a:buf)
     if winid != win_getid()
       call win_execute(winid, 'normal! G')
     endif

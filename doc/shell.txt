@@ -23,6 +23,10 @@ aliases, options (`set -euo pipefail`), positional arguments and `cd` carry
 over to later runs. Output goes to the [Shell] window; the script is never
 modified and stays runnable as is.
 
+Each script has its own preview buffer, named "[Shell] <file>" (the path
+relative to the current directory, or "[Shell]" for a buffer without a
+name). They share one window, which shows the script that ran last.
+
 Each run executes in a forked subshell of the session shell; its final
 state is written back to the session. So `exit`, `die`, a `set -e` failure
 or an interrupt end only that run. Background jobs, traps and open file
@@ -48,6 +52,7 @@ Inside a run, `$0` is the script's path. In bash, `BASH_SOURCE` is not.
                         ad-hoc commands. It applies the script's setup
                         regions like any run.               *:Sh-scratch*
 :Sh setup               Re-apply every setup region.           *:Sh-setup*
+:%Sh                    Run the whole buffer in the session.
 :Sh actions             Menu of what can be done at the cursor: run,
                         setup, scratch, history, interrupt, restart.
                                                             *:Sh-actions*
@@ -78,8 +83,9 @@ Default mappings for sh and zsh buffers (disable with |g:shell_no_mappings|):
   <LocalLeader>rr          <Plug>(shell-run)           command under cursor
   {Visual}<LocalLeader>r   <Plug>(shell-run-selection)
   <LocalLeader>rtc         <Plug>(shell-run-tocursor)
-  <LocalLeader>rf          <Plug>(shell-run-file)
-  <LocalLeader>ra          <Plug>(shell-actions)
+  <LocalLeader>rf          <Plug>(shell-run-file)      saved file, fresh process
+  <LocalLeader>ral         <Plug>(shell-run-all)       whole buffer, in the session
+  <LocalLeader>rc          <Plug>(shell-actions)
   <LocalLeader>rh          <Plug>(shell-history)
 
 ==============================================================================
