@@ -41,7 +41,7 @@ endfunction
 
 " Output lines of the preview (headers and echoed code dropped).
 function! s:out() abort
-  return filter(s:preview(), 'v:val !~# "^\\%(── \\|[$>] \\)"')
+  return filter(s:preview(), 'v:val !~# "^\\%(── \\|[$#] \\)"')
 endfunction
 
 " Run lines l1..l2 and return their output.
@@ -212,6 +212,25 @@ endfunction
 
 function! Test_state_zsh() abort
   call s:check_state('zsh')
+endfunction
+
+" Values with bytes that typeset/declare -p mangle (\034, \001) survive.
+function! s:check_binary_state(shell) abort
+  call s:reset()
+  call s:buf('binary.' . a:shell, ['#!/bin/' . a:shell,
+        \ 'k=$(printf ''a\034P\001b''); a=("$k" x)',
+        \ 'printf %s "$k" "${a[@]}" | od -An -v -tx1 | tr -d '' \n'''])
+  call s:run(2)
+  call assert_equal(['611c500162611c50016278'], s:run_out(3))
+  call assert_equal(['611c500162611c50016278'], s:run_out(3))
+endfunction
+
+function! Test_binary_state_bash() abort
+  call s:check_binary_state('bash')
+endfunction
+
+function! Test_binary_state_zsh() abort
+  call s:check_binary_state('zsh')
 endfunction
 
 function! s:check_strict(shell) abort
@@ -389,6 +408,8 @@ function! Test_keys() abort
   execute "normal \\rr"
   call s:wait()
   call assert_equal(['two'], s:out())
+  " The preview of keys.sh must not get the sh filetype (LSP, mappings).
+  call assert_equal('', getbufvar(shell#preview#bufnr(), '&filetype'))
   execute "normal 1GVj\\r"
   call s:wait()
   call assert_equal(['one', 'two'], s:out())
@@ -396,7 +417,7 @@ function! Test_keys() abort
   call s:wait()
   call assert_match('^── L1-3 ', s:preview()[0])
   call assert_equal(['one', 'two', 'three'], s:out())
-  call cursor(3, 1)
+  call cursor(2, 1)
   execute "normal \\rtc"
   call s:wait()
   call assert_match('^── L1-2 ', s:preview()[0])
@@ -628,7 +649,7 @@ function! Test_history_show() abort
   call shell#history#show(e)
   let out = s:preview()
   call assert_match('^── history L1-2 · exit 2 · \d\+ms · \d\{4}-\d\d-\d\d \d\d:\d\d:\d\d · ', out[0])
-  call assert_equal(['$ echo one', '> echo two; exit 2', 'one', 'two'], out[1:])
+  call assert_equal(['$ echo one', '# echo two; exit 2', 'one', 'two'], out[1:])
 endfunction
 
 function! Test_codelens() abort
@@ -681,14 +702,14 @@ function! Test_actions_list() abort
   call s:reset()
   call s:buf('act.sh', ['# @setup', 'X=1', '# @end', 'echo "$X"', '', 'echo end'], 'sh')
   call cursor(5, 1)
-  call assert_equal(['Run lines above the cursor (L1-4)', 'Re-apply setup regions', 'Open scratch buffer'], s:titles())
+  call assert_equal(['Run to the cursor (L1-5)', 'Re-apply setup regions', 'Open scratch buffer'], s:titles())
   write
   call cursor(4, 1)
-  call assert_equal(['Run command (L4)', 'Run lines above the cursor (L1-3)', 'Run file', 'Re-apply setup regions', 'Open scratch buffer'], s:titles())
+  call assert_equal(['Run command (L4)', 'Run to the cursor (L1-4)', 'Run file', 'Re-apply setup regions', 'Open scratch buffer'], s:titles())
   call shell#actions#list()[0].Fn()
   call s:wait()
   call assert_equal(['1'], s:out())
-  call assert_equal(['Run command (L4)', 'Run lines above the cursor (L1-3)', 'Run file', 'Re-apply setup regions', 'Open scratch buffer',
+  call assert_equal(['Run command (L4)', 'Run to the cursor (L1-4)', 'Run file', 'Re-apply setup regions', 'Open scratch buffer',
         \ 'History of this command (1)', 'History of this file (2)', 'Restart the session'], s:titles())
   call setline(6, 'sleep 5')
   6Sh
@@ -770,7 +791,7 @@ endfunction
 function! Test_run_statement_and_tocursor() abort
   call s:reset()
   call s:buf('tocursor.sh', ['A=1', 'B=$((A + 1))', 'if [ "$B" = 2 ]; then', '  echo "B=$B"', 'fi'], 'sh')
-  call cursor(3, 1)
+  call cursor(2, 1)
   Sh tocursor
   call s:wait()
   call assert_match('^── L1-2 ·', s:preview()[0])
@@ -824,7 +845,7 @@ function! Test_setup_regions() abort
   " A fresh session applies the region before the snippet.
   let out = s:run(18)
   call assert_match('^── setup L9-15 · exit 0', out[0])
-  call assert_equal(['$ STEPS=${STEPS:-me,nodes}', '> CALLS=${CALLS:-0}'], out[1:2])
+  call assert_equal(['$ STEPS=${STEPS:-me,nodes}', '# CALLS=${CALLS:-0}'], out[1:2])
   call assert_match('^── L18 · exit 0', out[8])
   call assert_equal(['$ has_step me && step_me', '==> me'], out[9:])
   " Unchanged region: not re-applied, so state from runs is kept.
@@ -846,7 +867,7 @@ function! Test_setup_region_failure() abort
   call s:reset()
   call s:buf('fail.sh', ['# @setup', 'echo loading', 'echo "bad config" >&2; exit 4', '# @end', 'echo never'], 'sh')
   let out = s:run(5)
-  call assert_equal(['── setup L2-3 failed · exit 4', '$ echo loading', '> echo "bad config" >&2; exit 4', 'loading', 'bad config'],
+  call assert_equal(['── setup L2-3 failed · exit 4', '$ echo loading', '# echo "bad config" >&2; exit 4', 'loading', 'bad config'],
         \ [substitute(out[0], ' · \d\+ms.*', '', '')] + out[1:])
   call assert_equal([[2, 'bad config']], shell#compat#diagnostics(bufnr('%')))
   " Fixing it applies it and clears the diagnostic.

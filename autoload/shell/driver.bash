@@ -25,7 +25,7 @@ __sh_names() {
 }
 
 __sh_dump() {
-  local __sh_rc=$? __sh_flags=$- __sh_vs __sh_o
+  local __sh_rc=$? __sh_flags=$- __sh_vs __sh_o __sh_v __sh_d __sh_k __sh_x __sh_ks
   trap - EXIT
   # Command substitution resets errexit; take it from $- instead.
   __sh_o=$(set +o | grep -v -e monitor -e errexit; shopt -p | grep -v login_shell)
@@ -36,6 +36,25 @@ __sh_dump() {
     __sh_vs=$(__sh_names)
     printf '__sh_keep=%q\n' " $(echo $__sh_vs) "
     [ -n "$__sh_vs" ] && declare -p $__sh_vs
+    # declare -p mangles some bytes, so reassign the values with %q, which
+    # round-trips any byte. Array elements one by one: bash 3.2 also mangles
+    # \001 in compound assignments.
+    for __sh_v in $__sh_vs; do
+      __sh_d=$(declare -p "$__sh_v")
+      case $__sh_d in *=*) ;; *) continue ;; esac
+      __sh_d=${__sh_d#declare -}
+      case ${__sh_d%% *} in
+        *[aA]*)
+          printf '%s=()\n' "$__sh_v"
+          eval "__sh_ks=(\"\${!$__sh_v[@]}\")"
+          for __sh_k in "${__sh_ks[@]}"; do
+            eval "__sh_x=\${$__sh_v[\$__sh_k]}"
+            printf '%s[%q]=%q\n' "$__sh_v" "$__sh_k" "$__sh_x"
+          done
+          ;;
+        *) printf '%s=%q\n' "$__sh_v" "${!__sh_v}" ;;
+      esac
+    done
     declare -f
     alias -p
     __sh_args=("$@")

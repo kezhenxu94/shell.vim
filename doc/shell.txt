@@ -43,7 +43,7 @@ Inside a run, `$0` is the script's path. In bash, `BASH_SOURCE` is not.
                         function definitions. In Neovim the bash treesitter
                         parser is used when available.                *:Sh*
 :{range}Sh [run]        Run the lines in {range}.               *:Sh-run*
-:Sh tocursor            Run the lines above the cursor line. *:Sh-tocursor*
+:Sh tocursor            Run the lines up to the cursor line. *:Sh-tocursor*
 :Sh file [args]         Run the saved script in a fresh process, with the
                         session's exported variables and cwd: `./script
                         args`, or `<shell> script args` if it is not

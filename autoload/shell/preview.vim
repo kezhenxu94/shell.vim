@@ -25,7 +25,8 @@ function! shell#preview#buffer(script) abort
     return buf
   endif
   let buf = bufadd(name)
-  call bufload(buf)
+  " No autocommands: a name ending in .sh would get the sh filetype (and LSP).
+  noautocmd call bufload(buf)
   for [opt, val] in [['&buftype', 'nofile'], ['&bufhidden', 'hide'], ['&swapfile', 0], ['&buflisted', 0], ['&modifiable', 0]]
     call setbufvar(buf, opt, val)
   endfor
@@ -125,12 +126,12 @@ function! shell#preview#jump() abort
   call cursor(r[0], 1)
 endfunction
 
-" Echo the executed code: "$ " before the first line, "> " before the rest.
+" Echo the executed code: "$ " before the first line, "# " before the rest.
 function! shell#preview#code(buf, lines) abort
   let prefix = '$ '
   for line in a:lines
     call shell#preview#set(a:buf, shell#preview#add(a:buf, ''), [[prefix, 'ShellMuted'], [line, 'ShellCode']])
-    let prefix = '> '
+    let prefix = '# '
   endfor
 endfunction
 

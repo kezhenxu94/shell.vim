@@ -45,12 +45,9 @@ function! shell#run_statement() abort
   call s:run(bufnr('%'), r[0], r[1])
 endfunction
 
-" Run the lines above the cursor.
+" Run the lines up to and including the cursor line.
 function! shell#tocursor() abort
-  if line('.') == 1
-    return s:error('nothing above the cursor')
-  endif
-  call s:run(bufnr('%'), 1, line('.') - 1)
+  call s:run(bufnr('%'), 1, line('.'))
 endfunction
 
 " Run the saved script in a fresh process (it gets the session's exported

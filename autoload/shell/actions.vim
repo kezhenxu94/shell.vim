@@ -8,9 +8,7 @@ function! shell#actions#list() abort
   if !empty(r)
     call add(items, {'title': 'Run command (' . s:lines(r[0], r[1]) . ')', 'Fn': function('shell#run', r)})
   endif
-  if line('.') > 1
-    call add(items, {'title': 'Run lines above the cursor (' . s:lines(1, line('.') - 1) . ')', 'Fn': function('shell#tocursor')})
-  endif
+  call add(items, {'title': 'Run to the cursor (' . s:lines(1, line('.')) . ')', 'Fn': function('shell#tocursor')})
   let script = shell#script(bufnr('%'))
   if script !=# '' && filereadable(script)
     call add(items, {'title': 'Run file', 'Fn': function('shell#file', [''])})

@@ -36,6 +36,17 @@ __sh_dump() {
     print -r -- "__sh_opts=(${(j: :)${(@qf)__sh_o}})"
     print -r -- "__sh_keep=(${(j: :)${(@q)__sh_vs}})"
     (( $#__sh_vs )) && typeset -p -- $__sh_vs
+    # typeset -p mangles some bytes (0x1c is written as an ambiguous \C-\),
+    # so reassign the values with (q) quoting, which round-trips any byte.
+    local -a __sh_kv
+    for __sh_v in $__sh_vs; do
+      case ${parameters[$__sh_v]} in
+        (scalar*) print -r -- "$__sh_v=${(q)${(P)__sh_v}}" ;;
+        (array*) __sh_kv=("${(@P)__sh_v}") ;|
+        (association*) __sh_kv=("${(@kvP)__sh_v}") ;|
+        (array*|association*) print -r -- "$__sh_v=(${(j: :)${(@q)__sh_kv}})" ;;
+      esac
+    done
     typeset -f
     alias -L
     print -r -- "__sh_args=(${(j: :)${(@q)argv}})"

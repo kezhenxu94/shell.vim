@@ -2,7 +2,7 @@
 
 Run parts of a plain `.sh`/`.zsh` file in a persistent shell session, from Vim 9 or Neovim. There are no dependencies.
 
-- Run the command under the cursor (`<LocalLeader>rr`), a selection, a range, everything above the cursor (`:Sh tocursor`, `<LocalLeader>rtc`), the whole buffer (`<LocalLeader>ral`), or the saved file in a fresh process (`<LocalLeader>rf`).
+- Run the command under the cursor (`<LocalLeader>rr`), a selection, a range, everything up to the cursor line (`:Sh tocursor`, `<LocalLeader>rtc`), the whole buffer (`<LocalLeader>ral`), or the saved file in a fresh process (`<LocalLeader>rf`).
 - Variables, arrays, functions, aliases, `set -euo pipefail`, `$1…` and `cd` carry over between runs.
 - `exit`, `die` and `set -e` failures end only that run. The session survives.
 - Output streams into a preview split named after the script (`[Shell] tests/alliance.sh`). Each run gets a header (`── L12-15 · exit 0 · 230ms · ~/proj`), then the code that ran, then its output, with ANSI colors.
