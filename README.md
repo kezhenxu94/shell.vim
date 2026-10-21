@@ -2,6 +2,8 @@
 
 Run parts of a plain `.sh`/`.zsh` file in a persistent shell session, from Vim 9 or Neovim. There are no dependencies.
 
+![shell.vim demo](demo/demo.gif)
+
 - Run the command under the cursor (`<LocalLeader>rr`), a selection, a range, everything up to the cursor line (`:Sh tocursor`, `<LocalLeader>rtc`), the whole buffer (`<LocalLeader>ral`), or the saved file in a fresh process (`<LocalLeader>rf`).
 - Variables, arrays, functions, aliases, `set -euo pipefail`, `$1…` and `cd` carry over between runs.
 - `exit`, `die` and `set -e` failures end only that run. The session survives.
@@ -21,5 +23,8 @@ Add it as a package, for example under `pack/vendor/start/shell.vim`.
 ## Tests
 
 ```sh
-test/run.sh   # headless, in Vim and Neovim
+make test       # headless, in Vim and Neovim
+make test-e2e   # Vim and Neovim in tmux, driven with the default mappings, checking the screen
 ```
+
+Both take the editors to run as arguments, e.g. `test/e2e.sh nvim`. `make demo` regenerates the GIF above with tmux, [asciinema](https://asciinema.org) and [agg](https://github.com/asciinema/agg).

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Run the test suite in Vim and Neovim.
+# Run the test suite in Vim and Neovim. Usage: test/run.sh [vim|nvim]...
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 status=0
 export TEST_RESULT
 TEST_RESULT=$(mktemp)
-for editor in vim nvim; do
+(($#)) || set -- vim nvim
+for editor in "$@"; do
   command -v "$editor" >/dev/null || continue
   echo "== $editor"
   if [[ $editor == vim ]]; then

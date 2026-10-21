@@ -906,6 +906,100 @@ function! Test_unknown_subcommand() abort
   call assert_match('unknown subcommand: bogus', execute('Sh bogus'))
 endfunction
 
+function! Test_heredoc() abort
+  call s:reset()
+  call s:buf('heredoc.sh', ['N=2', 'cat <<EOF', 'n=$N', '$((N * 2))', 'EOF', "cat <<'EOF'", '$N', 'EOF'], 'sh')
+  call s:run(1)
+  call cursor(3, 1)
+  Sh
+  call s:wait()
+  call assert_match('^── L2-5 · exit 0', s:preview()[0])
+  call assert_equal(['n=2', '4'], s:out())
+  call cursor(7, 1)
+  Sh
+  call s:wait()
+  call assert_equal(['$N'], s:out())
+endfunction
+
+function! Test_file_errors() abort
+  call s:reset()
+  enew
+  setfiletype sh
+  call assert_match('buffer has no file on disk', execute('Sh file'))
+  call s:buf('notexec.sh', ['#!/bin/bash', 'echo "dollar0=$0"'], 'sh')
+  write
+  let path = expand('%:p')
+  call setline(3, 'unsaved')
+  call assert_match('unsaved changes', execute('Sh file'))
+  call s:wait()
+  " Not executable: run with the session's shell.
+  call assert_equal('$ exec bash ' . shellescape(path), s:preview()[1])
+  call assert_equal(['dollar0=' . path], s:out())
+  call setfperm(path, 'rwx------')
+  Sh file
+  call s:wait()
+  call assert_match('^\$ exec ''/.*/notexec\.sh''$', s:preview()[1])
+endfunction
+
+function! Test_preview_width() abort
+  call s:reset()
+  let g:shell_preview_width = 37
+  call s:buf('width.sh', ['echo'], 'sh')
+  call s:run(1)
+  let winid = bufwinid(shell#preview#bufnr())
+  call assert_equal(37, winwidth(winid))
+  call assert_true(getwinvar(winid, '&winfixwidth'))
+  " The script keeps the focus.
+  call assert_match('width\.sh$', bufname('%'))
+  unlet g:shell_preview_width
+endfunction
+
+function! Test_treesitter_disabled() abort
+  if !has('nvim') || !luaeval('require("shell.ts").available()')
+    return
+  endif
+  call s:reset()
+  " The scanner and treesitter disagree on a comment line inside a block.
+  call s:buf('nots.sh', ['echo a', '# c', 'echo b'], 'sh')
+  call assert_equal([], shell#statement_range(2))
+  let g:shell_treesitter = 0
+  call assert_equal([1, 1], shell#statement_range(1))
+  call assert_equal([], shell#statement_range(2))
+  unlet g:shell_treesitter
+endfunction
+
+function! Test_menu_history_limit() abort
+  if !has('menu')
+    return
+  endif
+  call s:reset()
+  let g:shell_menu_history = 2
+  call s:buf('menuhist.sh', ['echo 1', 'echo 2', 'echo 3', '# all runs'], 'sh')
+  for i in range(1, 3)
+    call s:run(i)
+  endfor
+  call cursor(4, 1)
+  call shell#actions#popup()
+  let items = filter(split(execute('menu PopUp.Shell.History'), "\n"), 'v:val =~# "✓"')
+  call assert_equal(2, len(items))
+  call assert_match('echo 3', items[0])
+  unlet g:shell_menu_history
+endfunction
+
+function! Test_checkhealth() abort
+  if !has('nvim')
+    return
+  endif
+  call s:reset()
+  checkhealth shell
+  call s:wait_for('getline("$") =~# "treesitter"')
+  let report = join(getline(1, '$'), "\n")
+  call assert_match('shell.vim', report)
+  call assert_match('bash: ', report)
+  call assert_match('pgrep found', report)
+  bwipe!
+endfunction
+
 " ------------------------------------------------------------------ runner
 let s:failed = 0
 let s:out = []

@@ -1,0 +1,10 @@
+" Minimal config used by demo/record.sh and test/e2e.sh
+set nocompatible
+execute 'set runtimepath^=' . fnameescape(expand('<sfile>:p:h:h'))
+filetype plugin on
+syntax on
+set number signcolumn=yes laststatus=2 termguicolors background=dark hidden
+silent! colorscheme habamax
+let maplocalleader = ' '
+let g:shell_init = ''
+let g:shell_preview_width = 60
