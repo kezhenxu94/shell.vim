@@ -2,7 +2,9 @@
 local M = {}
 
 function M.available()
-  return (pcall(vim.treesitter.language.add, 'bash'))
+  -- Nvim 0.11+ returns nil, err for a missing parser; older versions throw.
+  local ok, _, err = pcall(vim.treesitter.language.add, 'bash')
+  return ok and err == nil
 end
 
 -- Line range {start, end} (1-based) of the top-level command(s) at lnum, or
