@@ -1,5 +1,5 @@
 " Code actions: what can be done at the cursor, as a menu (vim.ui.select in
-" Neovim, a popup in Vim) and in the right-click PopUp menu.
+" Neovim, inputlist() in Vim) and in the right-click PopUp menu.
 
 " Actions at the cursor in the current buffer: [{'title', 'Fn'}, ...].
 function! shell#actions#list() abort
@@ -74,7 +74,10 @@ function! shell#actions#select(items, prompt) abort
     call luaeval('vim.ui.select(_A[1], {prompt = _A[2]}, function(_, idx)'
           \ . ' if idx then vim.fn["shell#actions#chosen"](idx) end end)', [titles, a:prompt])
   else
-    call popup_menu(titles, {'title': ' ' . a:prompt . ' ', 'callback': {_, i -> i > 0 ? a:items[i - 1].Fn() : 0}})
+    let i = inputlist([a:prompt . ':'] + map(titles, '(v:key + 1) . ". " . v:val'))
+    if i > 0 && i <= len(a:items)
+      call a:items[i - 1].Fn()
+    endif
   endif
 endfunction
 

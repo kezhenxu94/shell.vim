@@ -728,12 +728,8 @@ endfunction
 function! s:pick(n) abort
   if has('nvim')
     call luaeval('(function(n) vim.ui.select = function(items, _, cb) cb(items[n], n) end end)(_A)', a:n)
-  endif
-endfunction
-
-function! s:picked(n) abort
-  if !has('nvim')
-    call popup_close(popup_list()[0], a:n)
+  else
+    call feedkeys(a:n . "\<CR>", 't')
   endif
 endfunction
 
@@ -742,7 +738,6 @@ function! Test_actions_menu() abort
   call s:buf('menu.sh', ['echo picked'], 'sh')
   call s:pick(1)
   Sh actions
-  call s:picked(1)
   call s:wait()
   call assert_equal(['picked'], s:out())
 endfunction
@@ -758,7 +753,6 @@ function! Test_history_menu() abort
   call shell#preview#clear(shell#preview#bufnr())
   call s:pick(1)
   Sh history
-  call s:picked(1)
   call assert_match('^── history L1 · exit 0', s:preview()[0])
   call assert_equal(['$ echo "n=$N"', 'n=1'], s:preview()[1:])
   " On a line without history: the file's history.
@@ -766,7 +760,6 @@ function! Test_history_menu() abort
   call cursor(3, 1)
   call s:pick(3)
   Sh history
-  call s:picked(3)
   call assert_equal(['$ echo "n=$N"', 'n='], s:preview()[1:])
 endfunction
 

@@ -139,8 +139,8 @@ Setup status    The `# @setup` line shows `● setup applied`, `◐ setup
 Codelens        A virtual line above each command that ran before, from the
                 history: `↺ 3 runs · last ✓ 230ms · 5m ago`. It follows the
                 command's text, so it goes away when you change it.
-Actions         |:Sh-actions| opens a menu (|vim.ui.select()| in Neovim, a
-                popup in Vim). In sh/zsh buffers the right-click PopUp menu
+Actions         |:Sh-actions| opens a menu (|vim.ui.select()| in Neovim,
+                |inputlist()| in Vim). In sh/zsh buffers the right-click PopUp menu
                 has a "Shell" submenu with the same actions and a History
                 submenu.
 
