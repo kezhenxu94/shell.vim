@@ -1,0 +1,181 @@
+*shell.txt*  Run parts of a shell script in a persistent session
+
+==============================================================================
+CONTENTS                                                        *shell.vim*
+
+  1. Introduction .......................... |shell-intro|
+  2. Commands and mappings ................. |shell-commands|
+  3. Sessions .............................. |shell-sessions|
+  4. Setup regions ......................... |shell-setup|
+  5. Marks, codelens and actions ........... |shell-marks|
+  6. History ............................... |shell-history|
+  7. Options ............................... |shell-options|
+
+Works in Vim 9 and Neovim. Requires bash and/or zsh, and `pgrep` for
+|:Sh-interrupt|.
+
+==============================================================================
+1. INTRODUCTION                                                *shell-intro*
+
+Run the command under the cursor, a selection, a range or everything above
+the cursor of a plain .sh / .zsh file. Variables, arrays, functions,
+aliases, options (`set -euo pipefail`), positional arguments and `cd` carry
+over to later runs. Output goes to the [Shell] window; the script is never
+modified and stays runnable as is.
+
+Each run executes in a forked subshell of the session shell; its final
+state is written back to the session. So `exit`, `die`, a `set -e` failure
+or an interrupt end only that run. Background jobs, traps and open file
+descriptors do not carry over. Stdin is /dev/null: programs that read from
+the terminal (fzf, sudo prompts, ssh passwords) fail at once.
+
+Inside a run, `$0` is the script's path. In bash, `BASH_SOURCE` is not.
+
+==============================================================================
+2. COMMANDS AND MAPPINGS                                    *shell-commands*
+
+:Sh                     Run the command under the cursor, including `\`
+                        continuations, heredocs, if/for/case/{ } blocks and
+                        function definitions. In Neovim the bash treesitter
+                        parser is used when available.                *:Sh*
+:{range}Sh [run]        Run the lines in {range}.               *:Sh-run*
+:Sh tocursor            Run the lines above the cursor line. *:Sh-tocursor*
+:Sh file [args]         Run the saved script in a fresh process, with the
+                        session's exported variables and cwd: `./script
+                        args`, or `<shell> script args` if it is not
+                        executable. [args] is shell syntax.    *:Sh-file*
+:Sh scratch             Open a scratch buffer attached to the session, for
+                        ad-hoc commands. It applies the script's setup
+                        regions like any run.               *:Sh-scratch*
+:Sh setup               Re-apply every setup region.           *:Sh-setup*
+:Sh actions             Menu of what can be done at the cursor: run,
+                        setup, scratch, history, interrupt, restart.
+                                                            *:Sh-actions*
+:Sh history             Pick a past execution of the command under the
+                        cursor (else of the file) to show it in [Shell].
+                                                            *:Sh-history*
+:Sh restart             Start over with a fresh shell.       *:Sh-restart*
+:Sh interrupt           Stop the current run (SIGTERM to its process
+                        tree) and drop queued runs.        *:Sh-interrupt*
+
+Runs are queued per session. Each run gets a header in [Shell], then the
+code that ran, then its output:
+    ── L12-15 · exit 0 · 230ms · ~/proj
+    $ curl -s \
+    >   https://example.com
+    <output>
+Output streams in as it arrives; bold and the 16 ANSI colors are shown,
+other escape codes are stripped. In [Shell], `q` closes the window,
+<C-c> interrupts and <CR> jumps to the source lines of the run under the
+cursor.
+
+Lines that ran get a sign. A run that fails puts a diagnostic on its first
+line with the last line of output (stderr included) as the message: in
+Neovim via |vim.diagnostic| (so |]d| works), in Vim as a sign and virtual
+text. A later passing run over those lines clears it.
+
+Default mappings for sh and zsh buffers (disable with |g:shell_no_mappings|):
+  <LocalLeader>rr          <Plug>(shell-run)           command under cursor
+  {Visual}<LocalLeader>r   <Plug>(shell-run-selection)
+  <LocalLeader>rtc         <Plug>(shell-run-tocursor)
+  <LocalLeader>rf          <Plug>(shell-run-file)
+  <LocalLeader>ra          <Plug>(shell-actions)
+  <LocalLeader>rh          <Plug>(shell-history)
+
+==============================================================================
+3. SESSIONS                                                 *shell-sessions*
+
+A session starts on the first run. Its shell is, in order: the shebang
+(zsh, or bash for bash/sh/dash/ksh), zsh for the zsh filetype, $SHELL if it
+is zsh or bash, else bash. Its working directory is the git root of the
+file, else the file's directory. There is one session per buffer, or per
+shell and directory with |g:shell_session|. Wiping out a buffer stops its
+session.
+
+A non-interactive shell doesn't read your rc files: put aliases and
+functions you need in |g:shell_init|.
+
+==============================================================================
+4. SETUP REGIONS                                               *shell-setup*
+
+Mark definitions with two plain comments, so the shell ignores them:
+>
+    # @setup
+    BASE=${BASE:-http://localhost}
+    api() { curl -s "$BASE$1"; }
+    # @end
+
+    api /health
+<
+Before a run, each region above it that the session hasn't applied, or
+whose text changed since, is run first. Unchanged regions are not re-run,
+so state collected since is kept. A failing region stops the run and gets a
+diagnostic. A scratch buffer applies all regions of its script. A run
+that covers a whole region (e.g. |:Sh-tocursor|) counts as applying it.
+Regions don't nest.
+
+==============================================================================
+5. MARKS, CODELENS AND ACTIONS                                 *shell-marks*
+
+Everything shown in the script is virtual (extmarks in Neovim, text
+properties and signs in Vim); the buffer text is never changed.
+
+Run marks       Each run's lines are tracked by a mark, so its results land
+                on the right lines even if you edit while it runs. The mark
+                carries the ran sign and a status after the first line:
+                `… queued`, `⟳ running`, `✓ 230ms`, `✗ exit 1 · 40ms`. A new
+                run over the same lines replaces it.
+Inline output   With |g:shell_inline_output| > 0, the last lines of output
+                are shown as virtual lines below the command.
+Setup status    The `# @setup` line shows `● setup applied`, `◐ setup
+                changed · re-applied on next run` or `○ setup not applied`
+                for the current session.
+Codelens        A virtual line above each command that ran before, from the
+                history: `↺ 3 runs · last ✓ 230ms · 5m ago`. It follows the
+                command's text, so it goes away when you change it.
+Actions         |:Sh-actions| opens a menu (|vim.ui.select()| in Neovim, a
+                popup in Vim). In sh/zsh buffers the right-click PopUp menu
+                has a "Shell" submenu with the same actions and a History
+                submenu.
+
+==============================================================================
+6. HISTORY                                                  *shell-history*
+
+Every run is saved to <dir>/<script path with / as %>.jsonl, where <dir>
+is |g:shell_history_dir|: one JSON object per line with the time, code,
+label, exit status, duration, cwd, shell and output (up to
+|g:shell_history_output| lines, ANSI codes kept). The newest
+|g:shell_history_max| entries are kept. Runs from a scratch buffer go to
+its script's history.
+
+Output often holds secrets (tokens in API responses). The directory is
+created 0700 and files 0600; set |g:shell_history| to 0 to keep nothing.
+
+==============================================================================
+7. OPTIONS                                                   *shell-options*
+
+*g:shell_session*        'buffer' (default) or 'cwd': one session per
+                         shell and git root / directory.
+*g:shell_init*           Shell code run when a session starts. Default:
+                         source ~/.aliases and
+                         $XDG_CONFIG_HOME/zsh/functions/*. Set to '' to
+                         disable.
+*g:shell_setup_markers*  Default ['# @setup', '# @end'].
+*g:shell_preview_width*  Width of the [Shell] window. Default 80.
+*g:shell_sign*           Sign text for lines that ran. Default '▏'.
+*g:shell_treesitter*     Use treesitter in Neovim. Default 1.
+*g:shell_no_mappings*    Skip default mappings. Default 0.
+*g:shell_inline_output*  Output lines shown below a command. Default 0.
+*g:shell_codelens*       Show codelenses. Default 1.
+*g:shell_history*        Save executions. Default 1.
+*g:shell_history_dir*    Default stdpath('state')/shell in Neovim,
+                         $XDG_STATE_HOME/vim/shell (~/.local/state) in Vim.
+*g:shell_history_max*    Entries kept per script. Default 100.
+*g:shell_history_output* Output lines kept per entry. Default 500.
+*g:shell_menu_history*   History entries in the PopUp menu. Default 15.
+
+Highlight groups: ShellRan, ShellError, ShellDiagnostic, ShellHeader,
+ShellCode, ShellOk, ShellFail, ShellRunning, ShellWarn, ShellMuted,
+ShellOutput, ShellLens.
+
+ vim:tw=78:ts=8:ft=help:norl:
